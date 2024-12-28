@@ -32,7 +32,7 @@ def choose_charge(distance):
     return None, None
 
 # Интерфейс Streamlit
-st.title("Баллистический калькулятор для миномёта")
+st.title("Баллистический калькулятор для миномёта alpha 1.0")
 st.write("Введите параметры для расчёта")
 
 # Ввод данных
