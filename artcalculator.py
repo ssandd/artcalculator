@@ -35,6 +35,8 @@ def plot_trajectory(distance, height_mortar, height_target, charges, angle, velo
     plt.figure(figsize=(8, 5))
     plt.plot(x, y, label="Траектория полёта")
     plt.axhline(y=height_target, color="red", linestyle="--", label="Цель")
+    plt.axhline(y=0, color="blue", linestyle="--", label="Уровень моря")
+    plt.scatter([0, distance], [height_mortar, height_target], color="green", zorder=5)
     plt.xlabel("Дистанция (м)")
     plt.ylabel("Высота (м)")
     plt.title(f"Траектория полёта: {charges} заряд(ов)")
@@ -42,9 +44,15 @@ def plot_trajectory(distance, height_mortar, height_target, charges, angle, velo
     plt.grid()
     st.pyplot(plt)
 
-# Основной блок Streamlit с логотипом
-st.image("logo.png", use_column_width=True)  # Загрузка логотипа
-st.markdown("<h1 style='text-align: center; color: white; background-color: black; padding: 10px;'>Баллистический калькулятор 1.1-alpha</h1>", unsafe_allow_html=True)
+# Основной блок Streamlit
+st.title("Баллистический калькулятор 1.1-alpha")
+
+# Логотип и заголовок
+col1, col2 = st.columns([1, 5])
+with col1:
+    st.image("logo.png", use_column_width=True)
+with col2:
+    st.write("# Калькулятор миномётной стрельбы")
 
 # Ввод данных
 distance = st.number_input("Введите дистанцию до цели (м):", min_value=100, max_value=2300, step=1)
