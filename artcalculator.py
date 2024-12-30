@@ -50,7 +50,7 @@ st.title("Баллистический калькулятор 1.1-alpha")
 # Логотип и заголовок
 col1, col2 = st.columns([1, 5])
 with col1:
-    st.image("logo.png", use_column_width=True)
+    st.image("logo.png", use_container_width=True)
 with col2:
     st.write("# Калькулятор миномётной стрельбы")
 
