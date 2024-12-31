@@ -3,7 +3,7 @@ import numpy as np
 import math
 import matplotlib.pyplot as plt
 
-# Таблица данных
+# Таблица данных для расчётов
 data = {
     4: {"distances": [400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000, 2100, 2200, 2300],
         "angles": [1418, 1398, 1376, 1355, 1333, 1311, 1288, 1264, 1240, 1215, 1189, 1161, 1133, 1102, 1069, 1034, 995, 950, 896, 820],
@@ -23,51 +23,74 @@ data = {
         "dispersion": 13, "velocity": 100},
 }
 
-# Функция для построения траектории
-def plot_trajectory(distance, height_mortar, height_target, charges, angle, velocity):
-    g = 9.81  # ускорение свободного падения
-    theta = math.radians(angle / 1000 * 60)  # перевод "тыс" в градусы
-    time_of_flight = 2 * velocity * math.sin(theta) / g  # время полёта
-    t = np.linspace(0, time_of_flight, num=500)  # временная шкала
-    x = velocity * np.cos(theta) * t  # координата x
-    y = height_mortar + velocity * np.sin(theta) * t - 0.5 * g * t**2  # координата y
+# Функция расчёта азимута и дистанции
+def calculate_distance_and_azimuth(x1, y1, x2, y2):
+    dx = (x2 - x1) * 100  # Разница по горизонтали (метры)
+    dy = (y2 - y1) * 100  # Разница по вертикали (метры)
+    distance = math.sqrt(dx**2 + dy**2)
+    azimuth = (math.degrees(math.atan2(dx, dy)) + 360) % 360
+    return distance, azimuth
 
-    plt.figure(figsize=(8, 5))
-    plt.plot(x, y, label="Траектория полёта")
-    plt.axhline(y=height_target, color="red", linestyle="--", label="Цель")
-    plt.axhline(y=0, color="blue", linestyle="--", label="Уровень моря")
-    plt.scatter([0, distance], [height_mortar, height_target], color="green", zorder=5)
-    plt.xlabel("Дистанция (м)")
-    plt.ylabel("Высота (м)")
-    plt.title(f"Траектория полёта: {charges} заряд(ов)")
+# Функция визуализации
+def plot_trajectory_2d(mortar_coords, target_coords, dispersion_radius):
+    plt.figure(figsize=(8, 8))
+    plt.plot([mortar_coords[0], target_coords[0]], [mortar_coords[1], target_coords[1]], 'b-', label="Траектория")
+    plt.scatter(*mortar_coords, c='green', label="Миномёт", zorder=5)
+    plt.scatter(*target_coords, c='red', label="Цель", zorder=5)
+    circle = plt.Circle(target_coords, dispersion_radius, color='orange', fill=False, linestyle='--', label="Разброс")
+    plt.gca().add_artist(circle)
+    plt.grid(True)
+    plt.axis('equal')
+    plt.xlabel("X (м)")
+    plt.ylabel("Y (м)")
     plt.legend()
-    plt.grid()
     st.pyplot(plt)
 
 # Основной блок Streamlit
 st.title("Баллистический калькулятор 1.1-alpha")
 
-# Логотип и заголовок
-col1, col2 = st.columns([1, 5])
-with col1:
-    st.image("logo.png", use_container_width=True)
-with col2:
-    st.write("# Калькулятор миномётной стрельбы")
+# Выбор режима
+mode = st.radio("Выберите режим работы:", ["Ввод дистанции", "Ввод координат"])
 
-# Ввод данных
-distance = st.number_input("Введите дистанцию до цели (м):", min_value=100, max_value=2300, step=1)
-height_mortar = st.number_input("Высота миномёта (м):", min_value=-100, max_value=5000, step=1)
-height_target = st.number_input("Высота цели (м):", min_value=-100, max_value=5000, step=1)
-charges = st.radio("Выберите количество пороховых зарядов:", options=[4, 3, 2, 1])
+# Режим ввода дистанции
+if mode == "Ввод дистанции":
+    distance = st.number_input("Введите дистанцию до цели (м):", min_value=100, max_value=2300, step=1)
+    height_mortar = st.number_input("Высота миномёта (м):", min_value=-100, max_value=5000, step=1)
+    height_target = st.number_input("Высота цели (м):", min_value=-100, max_value=5000, step=1)
+    charges = st.radio("Выберите количество пороховых зарядов:", options=[4, 3, 2, 1])
+    if st.button("Рассчитать"):
+        charge_data = data[charges]
+        if distance < min(charge_data["distances"]) or distance > max(charge_data["distances"]):
+            st.error("Дистанция вне диапазона выбранного заряда!")
+        else:
+            angle, time = np.interp(distance, charge_data["distances"], charge_data["angles"]), np.interp(distance, charge_data["distances"], charge_data["times"])
+            st.write(f"Вертикальный угол: {angle:.2f} тыс")
+            st.write(f"Время полёта: {time:.2f} секунд")
+            st.write(f"Средняя дисперсия: {charge_data['dispersion']} метров")
 
-# Кнопка расчёта
-if st.button("Рассчитать"):
-    charge_data = data[charges]
-    if distance < min(charge_data["distances"]) or distance > max(charge_data["distances"]):
-        st.error("Дистанция вне диапазона выбранного заряда!")
-    else:
-        angle, time = np.interp(distance, charge_data["distances"], charge_data["angles"]), np.interp(distance, charge_data["distances"], charge_data["times"])
-        st.write(f"Вертикальный угол: {angle:.2f} тыс")
-        st.write(f"Время полёта: {time:.2f} секунд")
-        st.write(f"Средняя дисперсия: {charge_data['dispersion']} метров")
-        plot_trajectory(distance, height_mortar, height_target, charges, angle, charge_data["velocity"])
+# Режим ввода координат
+elif mode == "Ввод координат":
+    col1, col2 = st.columns(2)
+    with col1:
+        mortar_x = st.number_input("Координата X миномёта:", min_value=0, max_value=136)
+        mortar_y = st.number_input("Координата Y миномёта:", min_value=0, max_value=130)
+        mortar_alt = st.number_input("Высота миномёта (м):", min_value=-100, max_value=5000, step=1)
+    with col2:
+        target_x = st.number_input("Координата X цели:", min_value=0, max_value=136)
+        target_y = st.number_input("Координата Y цели:", min_value=0, max_value=130)
+        target_alt = st.number_input("Высота цели (м):", min_value=-100, max_value=5000, step=1)
+    charges = st.radio("Выберите количество пороховых зарядов:", options=[4, 3, 2, 1])
+    if st.button("Рассчитать"):
+        distance, azimuth = calculate_distance_and_azimuth(mortar_x, mortar_y, target_x, target_y)
+        charge_data = data[charges]
+        if distance < min(charge_data["distances"]) or distance > max(charge_data["distances"]):
+            st.error("Дистанция вне диапазона выбранного заряда!")
+        else:
+            angle, time = np.interp(distance, charge_data["distances"], charge_data["angles"]), np.interp(distance, charge_data["distances"], charge_data["times"])
+            corrected_angle = angle + math.degrees(math.atan2(target_alt - mortar_alt, distance))
+            st.write(f"Дистанция до цели: {distance:.2f} метров")
+            st.write(f"Азимут: {azimuth:.2f}°")
+            st.write(f"Вертикальный угол: {corrected_angle:.2f} тыс")
+            st.write(f"Время полёта: {time:.2f} секунд")
+            st.write(f"Средняя дисперсия: {charge_data['dispersion']} метров")
+            plot_trajectory_2d((mortar_x * 100, mortar_y * 100), (target_x * 100, target_y * 100), charge_data['dispersion'])
