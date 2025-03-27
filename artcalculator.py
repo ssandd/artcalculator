@@ -1,102 +1,70 @@
 import streamlit as st
 import numpy as np
-import matplotlib.pyplot as plt
-from math import sqrt, atan2, degrees, radians, cos, sin
 
-# Интерполяция углов по таблице данных
-def interpolate_angle(distance, charges_data, charges):
-    data = charges_data[charges - 1]
-    distances = data["distance"]
-    angles = data["angle"]
-    return np.interp(distance, distances, angles)
+def interpolate_value(x, x1, y1, x2, y2):
+    return y1 + (y2 - y1) * ((x - x1) / (x2 - x1))
 
-# Функция для расчёта расстояния между координатами
-def calculate_distance(coord1, coord2):
-    dx = coord2[0] - coord1[0]
-    dy = coord2[1] - coord1[1]
-    return sqrt(dx**2 + dy**2)
+def calculate_aiming_angle(distance, height_mortar, height_target, table):
+    distances = table['distance']
+    angles = table['angle']
+    height_corrections = table['height_correction']
+    
+    idx = np.searchsorted(distances, distance, side='right')
+    if idx == 0 or idx >= len(distances):
+        return None
+    
+    d1, d2 = distances[idx-1], distances[idx]
+    a1, a2 = angles[idx-1], angles[idx]
+    h1, h2 = height_corrections[idx-1], height_corrections[idx]
+    
+    base_angle = interpolate_value(distance, d1, a1, d2, a2)
+    avg_height_correction = (h1 + h2) / 2
+    delta_height = height_target - height_mortar
+    height_adjustment = avg_height_correction * (delta_height / 100)
+    
+    return round(base_angle - height_adjustment)
 
-# Функция для расчёта азимута
-def calculate_azimuth(coord1, coord2):
-    dx = coord2[0] - coord1[0]
-    dy = coord2[1] - coord1[1]
-    return (degrees(atan2(dy, dx)) + 360) % 360
+def main():
+    st.set_page_config(page_title="Минометный калькулятор", layout="centered")
+    st.title("Минометный калькулятор")
+    
+    charge_options = {
+        "0 зарядов": 0, "1 заряд": 1, "2 заряда": 2, "3 заряда": 3, "4 заряда": 4
+    }
+    charge = st.selectbox("Выберите количество пороховых зарядов:", list(charge_options.keys()))
+    
+    distance = st.number_input("Введите дистанцию до цели (м):", min_value=50, max_value=2300, step=1)
+    height_mortar = st.number_input("Введите высоту миномета (м):", min_value=0, max_value=500, step=1)
+    height_target = st.number_input("Введите высоту цели (м):", min_value=0, max_value=500, step=1)
+    
+    if st.button("Рассчитать угол наведения"):
+        table = load_table(charge_options[charge])
+        angle = calculate_aiming_angle(distance, height_mortar, height_target, table)
+        
+        if angle:
+            st.success(f"Установите прицел на {angle} тысячных.")
+        else:
+            st.error("Дистанция вне диапазона таблицы!")
 
-# Коррекция угла стрельбы по высоте
-def adjust_angle_for_altitude(vertical_angle, distance, alt_mortar, alt_target):
-    altitude_difference = alt_target - alt_mortar
-    correction = degrees(atan2(altitude_difference, distance))
-    return vertical_angle + correction
+def load_table(charge):
+    tables = {
+        0: {'distance': [50, 100, 150, 200, 250, 300, 350, 400, 450, 500],
+            'angle': [1455, 1411, 1365, 1318, 1268, 1217, 1159, 1095, 1023, 922],
+            'height_correction': [44, 46, 47, 50, 51, 58, 64, 72, 101, 0]},
+        1: {'distance': [100, 200, 300, 400, 500, 600, 700, 800],
+            'angle': [1446, 1392, 1335, 1275, 1212, 1141, 1058, 952],
+            'height_correction': [27, 28, 29, 31, 35, 40, 48, 81]},
+        2: {'distance': [200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400],
+            'angle': [1432, 1397, 1362, 1325, 1288, 1248, 1207, 1162, 1114, 1060, 997, 914, 755],
+            'height_correction': [17, 18, 18, 18, 20, 20, 22, 23, 26, 29, 37, 55, 0]},
+        3: {'distance': [300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800],
+            'angle': [1423, 1397, 1370, 1343, 1315, 1286, 1257, 1226, 1193, 1159, 1123, 1084, 1040, 991, 932, 851],
+            'height_correction': [13, 14, 13, 14, 14, 14, 16, 16, 16, 18, 19, 22, 24, 28, 36, 68]},
+        4: {'distance': [400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000, 2100, 2200, 2300],
+            'angle': [1418, 1398, 1376, 1355, 1333, 1311, 1288, 1264, 1240, 1215, 1189, 1161, 1133, 1102, 1069, 1034, 995, 950, 896, 820],
+            'height_correction': [10, 11, 10, 11, 11, 12, 12, 12, 13, 13, 14, 14, 15, 16, 17, 19, 22, 26, 34, 65]}
+    }
+    return tables.get(charge, tables[0])
 
-# Преобразование координат из формата 054885 в 100-метровую сетку
-def parse_coordinates(coord):
-    main_square_x = int(coord[:3])
-    main_square_y = int(coord[3:6])
-    return np.array([main_square_x, main_square_y])
-
-# Данные для углов и дистанций
-charges_data = [
-    {"distance": [100, 200, 300, 400, 500], "angle": [45, 40, 35, 30, 25]},  # Заряд 1
-    {"distance": [200, 400, 600, 800, 1000], "angle": [50, 45, 40, 35, 30]},  # Заряд 2
-    {"distance": [300, 600, 900, 1200, 1500], "angle": [55, 50, 45, 40, 35]},  # Заряд 3
-    {"distance": [400, 800, 1200, 1600, 2000], "angle": [60, 55, 50, 45, 40]},  # Заряд 4
-]
-
-# Интерфейс приложения
-st.title("В ДАННЫЙ МОМЕНТ РАБОТАЕТ ХУЁВО, РЕКОМЕНДУЕТСЯ ПОКА НЕ ВЕРИТЬ РАСЧЁТАМ")
-
-# Режим ввода
-mode = st.radio("Выберите режим ввода", ["Ручной ввод дистанции", "Ввод координат"])
-
-if mode == "Ручной ввод дистанции":
-    st.header("Ручной ввод дистанции")
-    distance = st.number_input("Введите дистанцию до цели (м)", min_value=100, max_value=2000, step=1)
-    alt_mortar = st.number_input("Введите высоту миномёта (м)", step=1)
-    alt_target = st.number_input("Введите высоту цели (м)", step=1)
-    charges = st.selectbox("Выберите количество зарядов", [1, 2, 3, 4])
-
-    if st.button("Рассчитать"):
-        vertical_angle = interpolate_angle(distance, charges_data, charges)
-        adjusted_angle = adjust_angle_for_altitude(vertical_angle, distance, alt_mortar, alt_target)
-        st.success(f"Вертикальный угол: {adjusted_angle:.2f}°")
-        st.info(f"Дистанция: {distance} м")
-else:
-    st.header("Ввод координат")
-    mortar_coords = st.text_input("Введите координаты миномёта (например, 054885 060881)")
-    target_coords = st.text_input("Введите координаты цели (например, 058225 063441)")
-    alt_mortar = st.number_input("Введите высоту миномёта (м)", step=1)
-    alt_target = st.number_input("Введите высоту цели (м)", step=1)
-    charges = st.selectbox("Выберите количество зарядов", [1, 2, 3, 4])
-
-    if st.button("Рассчитать"):
-        try:
-            mortar_coords = parse_coordinates(mortar_coords)
-            target_coords = parse_coordinates(target_coords)
-            distance = calculate_distance(mortar_coords, target_coords) * 100  # Конвертация в метры
-            azimuth = calculate_azimuth(mortar_coords, target_coords)
-            vertical_angle = interpolate_angle(distance, charges_data, charges)
-            adjusted_angle = adjust_angle_for_altitude(vertical_angle, distance, alt_mortar, alt_target)
-
-            st.success(f"Вертикальный угол: {adjusted_angle:.2f}°")
-            st.info(f"Дистанция: {distance:.2f} м")
-            st.info(f"Азимут: {azimuth:.2f}°")
-
-            # Визуализация 2D-плана
-            fig, ax = plt.subplots()
-            ax.scatter(mortar_coords[0], mortar_coords[1], c="blue", label="Миномёт")
-            ax.scatter(target_coords[0], target_coords[1], c="red", label="Цель")
-            ax.plot(
-                [mortar_coords[0], target_coords[0]],
-                [mortar_coords[1], target_coords[1]],
-                color="green",
-                linestyle="--",
-                label="Линия огня"
-            )
-            ax.set_title("2D План огня")
-            ax.set_xlabel("Горизонтальная координата")
-            ax.set_ylabel("Вертикальная координата")
-            ax.legend()
-            ax.grid(True)
-            st.pyplot(fig)
-        except Exception as e:
-            st.error(f"Ошибка обработки координат: {e}")
+if __name__ == "__main__":
+    main()
